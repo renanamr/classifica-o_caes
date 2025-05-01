@@ -1,4 +1,7 @@
 import 'dart:typed_data';
+import 'package:classificacao_caes/src/widgets/background_card.dart';
+import 'package:classificacao_caes/src/widgets/button_core.dart';
+import 'package:classificacao_caes/src/widgets/image_area.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -48,7 +51,9 @@ class _DogClassifierPageState extends State<DogClassifierPage> {
     }
   }
 
-  Future<void> _classifyImage(String url) async {
+  Future<void> _pickImageFromWeb() async {
+    final String url = _urlController.text;
+
     setState(() {
       _result = "Classificando...";
       _imageBytes = null;
@@ -61,35 +66,7 @@ class _DogClassifierPageState extends State<DogClassifierPage> {
     }
 
     _imageBytes = response.bodyBytes;
-    img.Image? image = img.decodeImage(response.bodyBytes);
-    if (image == null) {
-      setState(() => _result = "Erro ao processar imagem.");
-      return;
-    }
-
-    img.Image resizedImage = img.copyResize(image, width: _inputSize, height: _inputSize);
-
-    // Convertendo imagem para input do modelo
-    TensorImage tensorImage = TensorImage(TfLiteType.float32);
-    tensorImage.loadImage(resizedImage);
-
-    // Normalização simples (0-255 para 0-1)
-    ImageProcessor processor = ImageProcessorBuilder()
-        .add(ResizeOp(_inputSize, _inputSize, ResizeMethod.bilinear))
-        .add(NormalizeOp(0, 255))
-        .build();
-    tensorImage = processor.process(tensorImage);
-
-    TensorBuffer output = TensorBuffer.createFixedSize([1, _classes.length], TfLiteType.float32);
-    _interpreter!.run(tensorImage.buffer, output.buffer);
-
-    List<double> scores = output.getDoubleList();
-    int maxIdx = scores.indexWhere((e) => e == scores.reduce((a, b) => a > b ? a : b));
-
-    setState(() {
-      _result =
-      "Raça: ${_classes[maxIdx]}\nConfiança: ${(scores[maxIdx] * 100).toStringAsFixed(2)}%";
-    });
+    _classifyImage();
   }
 
   Future<void> _pickImageFromGallery() async {
@@ -102,11 +79,11 @@ class _DogClassifierPageState extends State<DogClassifierPage> {
         _imageBytes = Uint8List.fromList(imageInBytes);
       });
 
-      _classifyImageFromGallery(pickedFile.path);
+      _classifyImage();
     }
   }
 
-  Future<void> _classifyImageFromGallery(String path) async {
+  Future<void> _classifyImage() async {
     img.Image image = img.decodeImage(_imageBytes!)!;
     img.Image resizedImage = img.copyResize(image, width: _inputSize, height: _inputSize);
 
@@ -134,59 +111,56 @@ class _DogClassifierPageState extends State<DogClassifierPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Classificador de Cães')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.blue[50],
+      body: BackgroundCard(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            const Text("Classificador", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+
+            ImageArea(imageBytes: _imageBytes,),
+
+            const SizedBox(height: 26),
+
             TextField(
               controller: _urlController,
-              decoration: const InputDecoration(
-                labelText: 'URL da Imagem',
-                border: OutlineInputBorder(),
-                filled: true,
+              decoration: InputDecoration(
+                labelText: "URL da imagem",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.link),
               ),
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 12),
+
             Row(
               children: [
-                ElevatedButton(
-                  onPressed: () => _classifyImage(_urlController.text),
-                  child: const Text('Classificar'),
+                Expanded(
+                  child: ButtonCore(
+                    onPressed: _pickImageFromGallery,
+                    icon: Icons.photo,
+                    label: "Galeria",
+                  ),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _pickImageFromGallery,
-                  child: const Text('Selecionar Imagem'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ButtonCore(
+                    onPressed: _pickImageFromWeb,
+                    icon: Icons.download,
+                    label: "Buscar URL",
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            _imageBytes != null
-                ? Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Image.memory(_imageBytes!, height: 200),
-              ),
-            )
-                : Container(),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 12),
             if (_result != null)
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    _result ?? 'Resultado aparecerá aqui',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
+              Text(_result!, style: const TextStyle(fontSize: 16), textAlign: TextAlign.center),
           ],
         ),
       ),
     );
   }
+
 }
